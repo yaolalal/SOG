@@ -1,0 +1,2 @@
+Include three components: graph_desc_token_pairs.json, struct_code_train_corpus.txt, struct_token_similarity.jsonl.
+They are used to fill templates and form Description-Token Pairs Matching, k-Nearest Token Neighbour Matching, True/False Structure Similarity Judgment corpora correspondingly. 
