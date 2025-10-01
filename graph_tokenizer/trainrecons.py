@@ -1,5 +1,4 @@
 import os
-# os.environ["CUDA_VISIBLE_DEVICES"] = "2"
 import argparse
 from utils import load_data
 from codes.utils import set_seed
@@ -49,6 +48,7 @@ def setup_logger(log_file='train.log'):
         logger.addHandler(ch)
 
     return logger
+
 def save_metrics_to_csv(out, filename="metric_results.csv"):
     rows = []
     for split, res_list in out.items():
@@ -80,15 +80,14 @@ class GraphDataset(Dataset):
 
 
 def evaluate_adj_reconstruction(true_edges, pred_edges):
-    """
-    输入:
-        true_edges: torch.Tensor or np.ndarray (0/1)，shape: (N,)
-        pred_edges: torch.Tensor or np.ndarray (0/1)，shape: (N,)
     
-    输出:
-        dict: 包含 accuracy, precision, recall, f1
-    """
-    # 转换为 numpy 数组
+    # 输入:
+    #     true_edges: torch.Tensor or np.ndarray (0/1)，shape: (N,)
+    #     pred_edges: torch.Tensor or np.ndarray (0/1)，shape: (N,)
+    
+    # 输出:
+    #     dict: 包含 accuracy, precision, recall, f1
+    
     if isinstance(true_edges, torch.Tensor):
         true_edges = true_edges.cpu().numpy()
     if isinstance(pred_edges, torch.Tensor):
@@ -102,10 +101,6 @@ def evaluate_adj_reconstruction(true_edges, pred_edges):
     }
 
 
-# model.to(device)
-# conf["feat_dim"] = 384 codebook-dim暂时保持一致
-# 需要设置conf["norm_type"] 后续可以添加batch-norm
-# 注意 g/feats 的输入格式
 class GCN(nn.Module):
     def __init__(self,conf):
         super().__init__()
@@ -220,9 +215,6 @@ def evaluate(model, dataloader, verbose=False):
     total_loss = 0
     cnt = 0
     results = []
-    '''print("Evaluating model...")
-    print(model)
-    print(dataloader)'''
 
     for _, batched_graph, feats in dataloader:
         batched_graph = batched_graph.to(device)
@@ -283,19 +275,11 @@ def custom_collate(batch):
     return graph_idxs, batched_graph, batched_feats
 
 def train_sage(model, dataloader, optimizer, data_val, logger, lamb=10):
-    """
-    Train for GraphSAGE. Process the graph in mini-batches using `dataloader` instead the entire graph `g`.
-    lamb: weight parameter lambda
-    """
-
-    # device = next(model.parameters()).device
     model.train()
     total_loss = 0
     for step, (graph_idxs, blocks, batch_feats) in enumerate(dataloader):
         # Compute loss and prediction
-        # test
         h_list, h, loss = model(blocks, batch_feats)
-
         # loss *= lamb
         optimizer.zero_grad()
         loss.backward()
@@ -326,13 +310,6 @@ def run_transductive(
         loss_and_score,
         logger
     ):
-    """
-    Train and eval under the transductive setting.
-    The train/valid/test split is specified by `indices`.
-    The input graph is assumed to be large. Thus, SAGE is used for GNNs, mini-batch is used for MLPs.
-
-    loss_and_score: Stores losses.
-    """
     set_seed(conf["seed"])
     save_dir = conf["save_dir"]
     device = conf["device"]
@@ -485,11 +462,6 @@ def main():
     os.makedirs(conf["output_dir"], exist_ok=True)
 
     model = GCN(conf).to(device)
-    # model = GCN(conf)
-    # if torch.cuda.device_count() > 1:
-    #     print(f"Using {torch.cuda.device_count()} GPUs for training.")
-    #     model = nn.DataParallel(model)
-    # model.to(device)
     optimizer = optim.Adam(
         model.parameters(), lr=1e-2, weight_decay=conf["weight_decay"]
     )
@@ -504,6 +476,7 @@ def main():
             loss_and_score,
             logger
         )
+    
     # 保存 loss_and_score
     score_path = os.path.join(conf['output_dir'], 'loss_and_score.pkl')
     with open(score_path, 'wb') as f:

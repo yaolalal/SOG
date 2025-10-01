@@ -1,6 +1,4 @@
 import os
-# os.environ["CUDA_VISIBLE_DEVICES"] = "2"  # 设置可见的GPU设备
-os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
 import argparse
 from utils import load_data
 from codes.utils import set_seed
@@ -25,14 +23,13 @@ from vq import VectorQuantize
 
 
 def evaluate_adj_reconstruction(true_edges, pred_edges):
-    """
-    输入:
-        true_edges: torch.Tensor or np.ndarray (0/1)，shape: (N,)
-        pred_edges: torch.Tensor or np.ndarray (0/1)，shape: (N,)
+    # 输入:
+    #     true_edges: torch.Tensor or np.ndarray (0/1)，shape: (N,)
+    #     pred_edges: torch.Tensor or np.ndarray (0/1)，shape: (N,)
     
-    输出:
-        dict: 包含 accuracy, precision, recall, f1
-    """
+    # 输出:
+    #     dict: 包含 accuracy, precision, recall, f1
+    
     # 转换为 numpy 数组
     if isinstance(true_edges, torch.Tensor):
         true_edges = true_edges.cpu().numpy()
@@ -246,9 +243,6 @@ def evaluate(model, dataloader, verbose=False):
 
 
 def custom_collate(batch):
-    """
-    batch: list of tuples: (graph_idx, graph, feats)
-    """
     graph_idxs, subgraphs, node_feats = zip(*batch)
     batched_graph = dgl_batch(subgraphs)
     batched_feats = torch.cat(node_feats, dim=0)  # 按节点维拼接
@@ -273,17 +267,10 @@ class GraphDataset(Dataset):
         return idx,sg.to(self.device), batch_feats.to(self.device)
 
 def train_sage(model, dataloader, optimizer, data_val, logger, lamb=10):
-    """
-    Train for GraphSAGE. Process the graph in mini-batches using `dataloader` instead the entire graph `g`.
-    lamb: weight parameter lambda
-    """
-
-    # device = next(model.parameters()).device
     model.train()
     total_loss = 0
     for step, (graph_idxs, blocks, batch_feats) in enumerate(dataloader):
         # Compute loss and prediction
-        # test
         h_list, quantized, loss, detailed_loss, codebook, dist_metric_list = model(blocks, batch_feats)
 
         # loss *= lamb
@@ -397,7 +384,6 @@ def run_transductive(
                 save_path = os.path.join(save_dir, f"model_at_epoch_{epoch}.pt")
                 torch.save(state, save_path)
 
-        # if count == conf["patience"] or epoch == conf["max_epoch"]:
         if epoch == conf["max_epoch"]:
             break
 
@@ -496,7 +482,7 @@ def main():
 
     loss_and_score=[]
 
-    # conf['lamb_edge'] = 0.03 后面我放大了100倍 其实是放大了3倍
+    # conf['lamb_edge'] = 0.03 
     model_path = f"./checkpoints/{dataset}/recons/checkpoints/model_at_epoch_{args_out.loadepoch}.pt"
     logger.info(f"Loading model from {model_path}")
     model = GCN(conf).to(device)
@@ -529,11 +515,6 @@ def main():
             param.requires_grad = False
         print("graph_layer_1 and graph_layer_2 have been frozen.")
 
-    '''optimizer = optim.Adam(
-        model.parameters(), lr=conf["learning_rate"], weight_decay=conf["weight_decay"]
-    )'''
-    # print([name for name, param in model.named_parameters()])
-
     codebook_params = [model.vq._codebook.embed]  # 可以选择需要加速的部分
     other_params = [param for name, param in model.named_parameters() if name != 'vq._codebook.embed']
     lr1 = 0.05
@@ -544,18 +525,10 @@ def main():
     ], lr=lr1) 
     
     logger.info(f"Optimizer initialized with learning rate {lr1} for other parameters and {lr2} for codebook parameters.")
-    # args to log
     logger.info(f"Output configuration: {args_out}")
     logger.info(f"Model configuration: {conf}")
 
-    # feats = torch.load(f'./new_node_feats/{args.dataset}/node_to_embedding.pt')
     run_transductive(conf,model,graphs,optimizer,loss_and_score,logger)
-
-    # # 保存 out
-    # out_path = os.path.join(conf['output_dir'], 'out.pkl')
-    # with open(out_path, 'wb') as f:
-    #     pickle.dump(out, f)
-    # logger.info(f"Saved out to {out_path}")
 
     # 保存 loss_and_score
     score_path = os.path.join(conf['output_dir'], 'loss_and_score.pkl')

@@ -1,6 +1,4 @@
 import os
-os.environ["NCCL_P2P_DISABLE"] = "1"
-os.environ["NCCL_IB_DISABLE"] = "1"
 import pickle
 import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM
@@ -10,17 +8,20 @@ import random
 import transformers
 from tqdm import tqdm
 import gc
-random.seed(42)  # 设置随机种子以确保结果可复现
 import logging
 import argparse
 
+# os.environ["NCCL_P2P_DISABLE"] = "1"
+# os.environ["NCCL_IB_DISABLE"] = "1"
+# For CUDA version issues
 low_atten = False
+random.seed(42)  # 设置随机种子以确保结果可复现
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--batch_size', type=int, default=32)
-parser.add_argument('--log_file', type=str, default='eval.log')
-parser.add_argument('--times', type=int, default=5)
-parser.add_argument('--data_path', type=str, default='corpus/old/ds_dict_balanced.pkl')
+parser.add_argument('--batch_size', type=int, default=32, help='Batch size for evaluation')
+parser.add_argument('--log_file', type=str, default='eval.log', help='Log file path')
+parser.add_argument('--times', type=int, default=3, help='Number of times to evaluate')
+parser.add_argument('--data_path', type=str, default='corpus/ds_dict.pkl', help='Path to the test dataset')
 parser.add_argument('--checkpoint_paths', default=None, type=str, nargs='+', help='List of checkpoint paths to evaluate')
 args = parser.parse_args()
 batch_size = args.batch_size
@@ -170,16 +171,6 @@ for checkpoint_path in checkpoint_paths:
 
             for i,(q,r,gt) in enumerate(zip(prompt,results,ground_truths)):
                 r_wo_q = r.replace(q, "")
-                # print('Response:',r_wo_q,'Ground Truth:',gt)
-
-                # if gt.lower() in r_wo_q.lower():
-                #     match_count += 1
-                #     if gt.lower() == 'true':
-                #         y_true.append(1)
-                #         y_pred.append(1)
-                #     else:
-                #         y_true.append(0)
-                #         y_pred.append(0)
                 if any(word in gt.lower() for word in ['no','false','inactive','rejected','not approved']) and any(word in r_wo_q.lower() for word in ['no','false','inactive','rejected','not approved']):
                     match_count += 1
                     y_true.append(0)

@@ -56,6 +56,12 @@ After that, the ./graph_tokenizer/corpus will include three components: graph_de
 ### Data preparing
 Entering ./LLM_tuning, run Data Preprocess.ipynb.
 
+### Add structural tokens
+Run addtokens.py to add structural tokens into LLM tokenizer and save the new tokenizer as well as the LLM model.
+```
+python addtokens.py
+```
+
 ### Token alignment
 Run pretune1stage.py and pretune2stage.py sequentially.
 In the first stage, we only tune the LLM embeddings of newly added structural tokens;

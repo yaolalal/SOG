@@ -1,35 +1,39 @@
 import pickle
 import torch
-from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
+from transformers import AutoTokenizer, AutoModelForCausalLM
 import statistics
 from sklearn.metrics import f1_score, roc_auc_score, precision_score, recall_score, accuracy_score
 import random
 import transformers
 from tqdm import tqdm
 import gc
-random.seed(42)  # 设置随机种子以确保结果可复现
 import logging
 import os
 import argparse
 import copy
 
-os.environ["NCCL_P2P_DISABLE"] = "1"
-os.environ["NCCL_IB_DISABLE"] = "1"
-os.environ['CUDA_VISIBLE_DEVICES'] = '0,2,3'
+# os.environ["NCCL_P2P_DISABLE"] = "1"
+# os.environ["NCCL_IB_DISABLE"] = "1"
+# For CUDA version issues
+low_atten = False
+random.seed(42)  # 设置随机种子以确保结果可复现
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--batch_size', type=int, default=32)
-parser.add_argument('--data_path', type=str, default='corpus/ds_dict_balanced.pkl')
-parser.add_argument('--times', type=int, default=1)
+parser.add_argument('--batch_size', type=int, default=32, help='Batch size for evaluation')
+parser.add_argument('--data_path', type=str, default='corpus/ds_dict.pkl', help='Path to the test dataset')
+parser.add_argument('--times', type=int, default=3, help='Number of times to evaluate')
+parser.add_argument('--log_file', type=str, default='eval.log', help='Log file path')
+
 args = parser.parse_args()
 batch_size = args.batch_size
 data_path = args.data_path
-log_file = 'eval_ablation.log'
+log_file = args.log_file
 times = args.times
-low_atten = True
-ignore_list = []
-attention_list = []
-# attention_list = ['BBBP_p_np','BACE_Class']
+# ignore_list is designed to ignore some tasks that are not for evaluation
+# attention_list is designed to evaluate some tasks that are targeted for evaluation
+ignore_list = [] # eg. ignore_list = ['BBBP_p_np','BACE_Class']
+attention_list = [] # eg. attention_list = ['BBBP_p_np','BACE_Class']
+
 def setup_logger(log_file='eval.log', log_level=logging.INFO):
     logger = logging.getLogger("eval_logger")
     logger.setLevel(log_level)
@@ -55,24 +59,15 @@ def setup_logger(log_file='eval.log', log_level=logging.INFO):
 
     return logger
 
-# 在 main 函数或脚本开始处调用
 logger = setup_logger(log_file=log_file)
 
-base_dir = "/data1/wujingyao-20354/wujingyao/codes/GraphLLM-graph/fastoutput/7b"
+base_dir = "./fastoutput" # 存储模型的根目录
 prefix = "llama-2-7b-"
-suffixes = ("")  # 你要保留的结尾后缀:"-1v1balance"-ori, 
+suffixes = ("")   
 llama_dirs = [
     name for name in os.listdir(base_dir)
     if os.path.isdir(os.path.join(base_dir, name)) and name.startswith(prefix) and name.endswith(suffixes)
 ]
-# stripped_names = []
-# for name in llama_dirs:
-#     if name.startswith(prefix) and name.endswith(suffixes):
-#         # 找到匹配的后缀       
-#         stripped = name[len(prefix):-len(suffixes)]
-#         stripped_names.append(stripped)
-#     else:
-#         stripped_names.append(name)
 
 with open(data_path, "rb") as f:
     ds_dict = pickle.load(f)
@@ -82,7 +77,7 @@ if 'test' not in ds_dict:
     logger.info(f"Loaded dataset from {data_path} does not contain 'test' key. Wrapping the dataset into a dictionary with 'test' key.")
 test_datasets = ds_dict['test']
 
-stripped_names = []
+stripped_names = [] 
 for name in llama_dirs:
     selected_dataset = None
     max_len = -1
@@ -117,6 +112,7 @@ except Exception as e:
         father_name = os.path.basename(os.path.dirname(name))
         stripped_names += [father_name[len(prefix):-len(suffixes)]]
 
+# 🌟🌟🌟 遍历所有模型和相应的任务 🌟🌟🌟
 for k,checkpoint_path in zip(stripped_names,checkpoint_paths):
     if k in ignore_list:
         logger.info(f"skipping {k}...")
@@ -144,8 +140,6 @@ for k,checkpoint_path in zip(stripped_names,checkpoint_paths):
         print(f"[ERROR] Failed to load from {checkpoint_path}: {e}")
         continue     
     tokenizer = AutoTokenizer.from_pretrained(checkpoint_path)
-    # model = AutoModelForCausalLM.from_pretrained(model_path,device_map="auto",torch_dtype=compute_dtype,attn_implementation=attn_implementation,low_cpu_mem_usage=True)
-    # tokenizer = AutoTokenizer.from_pretrained(tokenizer_path)
     model.config.pad_token_id = tokenizer.pad_token_id
     tokenizer.padding_side = "left"
     tokenizer.pad_token = tokenizer.eos_token
@@ -177,14 +171,13 @@ for k,checkpoint_path in zip(stripped_names,checkpoint_paths):
     logger.info('acc1 is calculated by match_count/total; acc2 is calculated by sklearn')
     for i in range(times):
         print(f"Experiment {i+1}:")
-        # messages = [[{"role": "user", "content": user_prompt}] for user_prompt in test_dataset['instruction']]
+        messages = [[{"role": "user", "content": user_prompt}] for user_prompt in test_dataset['instruction']]
         pipeline = load_model()
-        # prompt = pipeline.tokenizer.apply_chat_template(
-        #     messages,
-        #     tokenize=False,
-        #     add_generation_prompt=True
-        # )
-        prompt = test_dataset['instruction']
+        prompt = pipeline.tokenizer.apply_chat_template(
+            messages,
+            tokenize=False,
+            add_generation_prompt=True
+        )
 
         terminators = [
             pipeline.tokenizer.eos_token_id,
@@ -214,16 +207,6 @@ for k,checkpoint_path in zip(stripped_names,checkpoint_paths):
 
         for i,(q,r,gt) in enumerate(zip(prompt,results,ground_truths)):
             r_wo_q = r.replace(q, "")
-            # print('Response:',r_wo_q,'Ground Truth:',gt)
-
-            # if gt.lower() in r_wo_q.lower():
-            #     match_count += 1
-            #     if gt.lower() == 'true':
-            #         y_true.append(1)
-            #         y_pred.append(1)
-            #     else:
-            #         y_true.append(0)
-            #         y_pred.append(0)
             if any(word in gt.lower() for word in ['false','inactive','rejected','not approved']) and any(word in r_wo_q.lower() for word in ['false','inactive','rejected','not approved']):
                 match_count += 1
                 y_true.append(0)

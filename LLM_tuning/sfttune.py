@@ -14,10 +14,10 @@ import random
 import argparse
 random.seed(42)
 
-os.environ["NCCL_P2P_DISABLE"] = "1"
-os.environ["NCCL_IB_DISABLE"] = "1"
-os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
-os.environ["CUDA_VISIBLE_DEVICES"] = "0,1,2,3"
+# os.environ["NCCL_P2P_DISABLE"] = "1"
+# os.environ["NCCL_IB_DISABLE"] = "1"
+# os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
+# os.environ["CUDA_VISIBLE_DEVICES"] = "0,1,2,3"
 
 class FixedDeviceSFTTrainer(SFTTrainer):
     def compute_loss(self, model, inputs, return_outputs=False, num_items_in_batch=None):
@@ -31,11 +31,11 @@ class FixedDeviceSFTTrainer(SFTTrainer):
         return super().compute_loss(model, inputs, return_outputs,num_items_in_batch)
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--data_path', type=str, default="corpus/old/ds_dict_ori.pkl")
-parser.add_argument('--data_prefix', type=str, default="ori")
-parser.add_argument('--per_device_train_batch_size', type=int, default=8)
-parser.add_argument('--gradient_accumulation_steps', type=int, default=4)
-parser.add_argument('--num_train_epochs', type=int, default=3)
+parser.add_argument('--data_path', type=str, default="corpus/ds_dict.pkl", help='Path to the training dataset')
+parser.add_argument('--data_prefix', type=str, default="ori", help='Prefix for the dataset, used in output directory naming')
+parser.add_argument('--per_device_train_batch_size', type=int, default=8, help='Batch size per device during training')
+parser.add_argument('--gradient_accumulation_steps', type=int, default=4, help='Number of gradient accumulation steps')
+parser.add_argument('--num_train_epochs', type=int, default=3, help='Total number of training epochs to perform')
 parser.add_argument('--united_list', type=str, default='', help='Comma-separated list of items to process（others ignore）')
 
 args = parser.parse_args()
@@ -51,17 +51,13 @@ print(args)
 low_atten = False
 ########### 使用 7b 模型##################
 model_name = "llama-2-7b"
-reload_path = "/home/wujingyao/codes/experiment/GraphLLM-graph/models/second-stage-llama-2-7b/long_texts_match/checkpoint"
-########### 使用 3b 模型##################
-# model_name = "llama3.2-3b"
-# reload_path = "/home/wujingyao/codes/experiment/GraphLLM-graph/models/second-stage-llama3.2-3b/checkpoints/long_texts_match/checkpoint-1011"
+reload_path = f"./models/structure-pretrain-{model_name}-2stage"
 output_dir = f"./fastoutput/{model_name}-{united}-{data_prefix}" # 使用原始数据（没有均衡过）+ 不调整embedding层（因为没有新增tokens）
 with open(data_path, "rb") as f:
     ds_dict = pickle.load(f)
 
 # 🌟🌟🌟 加载模型 🌟🌟🌟
 model,tokenizer = reload_model_and_tokenizer(tokenizer_path=reload_path,model_path=reload_path,device_map="auto",lora=True,low_attention=low_atten)
-# model,tokenizer = reload_model_and_tokenizer(tokenizer_path=tokenizer_path,model_path=model_path,device_map=device_map,lora=True)
 print("tokenizer.vocab size:",len(tokenizer.get_vocab()))
 tokenizer.padding_side = "left"
 if tokenizer.pad_token is None:
@@ -120,14 +116,6 @@ ds_valid = concatenate_datasets(valid_datasets)
 max_length_train = max([len(tokenizer(example["text"])['input_ids']) for example in ds_train])
 max_length_valid = max([len(tokenizer(example["text"])['input_ids']) for example in ds_valid])
 max_length = max(max_length_train, max_length_valid)
-# train_dataset = Dataset.from_list([
-#     preprocess_function(ex, tokenizer, max_length=max_length_train)
-#     for ex in ds_train
-# ])
-# valid_dataset = Dataset.from_list([
-#     preprocess_function(ex, tokenizer, max_length=max_length_valid)
-#     for ex in ds_valid
-# ])
 
 trainer = FixedDeviceSFTTrainer(
         model=model,
@@ -139,14 +127,6 @@ trainer = FixedDeviceSFTTrainer(
         tokenizer=tokenizer,
         args=training_arguments,
 )
-# trainer = FixedDeviceSFTTrainer(
-#         model=model,
-#         train_dataset=train_dataset,
-#         eval_dataset=valid_dataset,
-#         peft_config=peft_config,
-#         tokenizer=tokenizer,
-#         args=training_arguments,
-#     )
 trainer.train()
 
 # 打印模型可训练参数

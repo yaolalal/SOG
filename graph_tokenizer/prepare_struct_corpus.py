@@ -164,5 +164,3 @@ output_file = "./corpus/struct_code_train_corpus.txt"
 os.makedirs(os.path.dirname(output_file), exist_ok=True)
 generate_struct_corpus_topk(D, code_prefix="gstruct_", output_file=output_file, k=5)
 
-
-# 🌟 构造结构描述关联语料

@@ -1,33 +1,23 @@
 import os
 import torch
+import json
+from tqdm import tqdm
 from transformers import TrainingArguments,DataCollatorForLanguageModeling
 from transformers import DataCollatorForLanguageModeling,DataCollatorWithPadding
 from peft import LoraConfig, prepare_model_for_kbit_training
 from trl import SFTTrainer
-
 from reference.llm_loader import reload_model_and_tokenizer
+from datasets import Dataset,load_dataset
+from reference.utils import get_tokenizer
 
-from datasets import Dataset,load_dataset,concatenate_datasets
-from transformers import AutoTokenizer
-import re
-import math
-import json
-from reference.utils import print_dict,get_tokenizer
-from tqdm import tqdm
-import logging
-os.environ["NCCL_P2P_DISABLE"] = "1"
-os.environ["NCCL_IB_DISABLE"] = "1"
+# os.environ["NCCL_P2P_DISABLE"] = "1"
+# os.environ["NCCL_IB_DISABLE"] = "1"
 
-model_name = "llama3.2-3b"
-model_path = f"/data1/wujingyao-20354/wujingyao/codes/models/llama-3.2-3b-instruct"
+model_name = "llama-2-7b"
+model_path = f"./models/structure-pretrain-{model_name}-1stage"
 tokenizer_path = model_path
 output_dir = f"./models/structure-pretrain-{model_name}-2stage"
 device_map = "auto"
-
-# 😭 如果不幸中断 请重写reload_path: short/medium/long的最后一个ckpt
-# reload_path = ''
-# model_path = reload_path
-# tokenizer_path = reload_path
 
 per_device_train_batch_size_dict = {
     "short_texts_path": 128,
@@ -73,10 +63,6 @@ tokenizer.pad_token = tokenizer.eos_token
 print('tokenizer config:',tokenizer.pad_token,tokenizer.padding_side,len(tokenizer.get_vocab()))
 model = prepare_model_for_kbit_training(model)
 
-# Unfreeze and mask gradients for new token embeddings
-# model.model.embed_tokens.weight.requires_grad = True
-# model.lm_head.weight.requires_grad = True
-
 # Define the start index for new tokens
 num_added_tokens = 256
 vocab_size = len(tokenizer.get_vocab())
@@ -94,14 +80,14 @@ def mask_grad_lmhead(grad):
     return grad * mask
 
 peft_config = LoraConfig(
-        lora_alpha=16,
-        lora_dropout=0.05,
-        r=16,
-        bias="none",
-        task_type="CAUSAL_LM",
-        # modules_to_save=["lm_head","embed_tokens"],
-        target_modules= ['k_proj', 'q_proj', 'v_proj', 'o_proj', "gate_proj", "down_proj", "up_proj"]
-    )
+    lora_alpha=16,
+    lora_dropout=0.05,
+    r=16,
+    bias="none",
+    task_type="CAUSAL_LM",
+    # modules_to_save=["lm_head","embed_tokens"],
+    target_modules= ['k_proj', 'q_proj', 'v_proj', 'o_proj', "gate_proj", "down_proj", "up_proj"]
+)
 
 tool,assistant_name = get_tokenizer(tokenizer_path=tokenizer_path)
 print("🌟 处理 **结构 tokens 全局距离** 语料：corpus/cora/struct_code_train_corpus.txt")
@@ -129,45 +115,41 @@ print('Example:')
 print(dataset_comp[0]['text'])
 
 
-# print("\n🌟 处理 **结构 tokens 子图匹配** 语料：corpus/cora/ego_graph_descriptions_corpus.json")
-# file_path = "./corpus/graph_desc_token_pairs.json"
-# with open(file_path, "r", encoding="utf-8") as f:
-#     data = json.load(f)
-# print('Length(raw) of train/validation/test:',len(data['train']),len(data['valid']),len(data['test']))
-# prefix_info = """
-# Given the structural description below, identify the best matching structure token for the graph.
-# This description outlines the graph structure starting with a center node which has largest degree, illustrating the connections between different nodes.
-# """
-# for split,data_tmp_list in data.items():
-#     pbar = tqdm(data_tmp_list, desc="Processing dataset_match")
-#     data_res_list = []
-#     for g in pbar:
-#         code = g['code']
-#         desc = g['desc']
-#         output = wrap_struct_token(code)
-#         messages = [
-#             {"role": "user", "content": prefix_info},
-#             {"role": "user", "content": desc},
-#             {"role": assistant_name, "content": output},
-#         ]
-#         text = tool.apply_chat_template(messages, tokenize=False)+"<|end_of_text|>"
-#         data_res_list.append({"text": text})
-# dataset_match = Dataset.from_list(data_res_list)
-# print('Wrapping to dataset:',dataset_match)
-# print('Example:')
-# print(dataset_match[0]['text'])
+print("\n🌟 处理 **结构 tokens 子图匹配** 语料：corpus/cora/ego_graph_descriptions_corpus.json")
+file_path = "./corpus/graph_desc_token_pairs.json"
+with open(file_path, "r", encoding="utf-8") as f:
+    data = json.load(f)
+print('Length(raw) of train/validation/test:',len(data['train']),len(data['valid']),len(data['test']))
+prefix_info = """
+Given the structural description below, identify the best matching structure token for the graph.
+This description outlines the graph structure starting with a center node which has largest degree, illustrating the connections between different nodes.
+"""
+for split,data_tmp_list in data.items():
+    pbar = tqdm(data_tmp_list, desc="Processing dataset_match")
+    data_res_list = []
+    for g in pbar:
+        code = g['code']
+        desc = g['desc']
+        output = wrap_struct_token(code)
+        messages = [
+            {"role": "user", "content": prefix_info},
+            {"role": "user", "content": desc},
+            {"role": assistant_name, "content": output},
+        ]
+        text = tool.apply_chat_template(messages, tokenize=False)+"<|end_of_text|>"
+        data_res_list.append({"text": text})
+dataset_match = Dataset.from_list(data_res_list)
+print('Wrapping to dataset:',dataset_match)
+print('Example:')
+print(dataset_match[0]['text'])
 
 
 datasets = {
-    # "short_texts_path": dataset_path,
+    "short_texts_path": dataset_path,
     "medium_texts_comp": dataset_comp,
-    # "long_texts_match": dataset_match,       
+    "long_texts_match": dataset_match,       
 }
 
-# 😭如果不幸中断，请重写 datasets：跳过已经训练过的datasets
-# datasets = {
-#     "medium_texts_comp": dataset_comp,
-# }
 
 # prev_checkpoint = None
 

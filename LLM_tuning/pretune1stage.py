@@ -1,4 +1,3 @@
-import os
 import torch
 from transformers import TrainingArguments,DataCollatorForLanguageModeling
 from transformers import DataCollatorForLanguageModeling
@@ -7,14 +6,16 @@ from reference.llm_loader import reload_model_and_tokenizer
 from datasets import Dataset,load_dataset
 from reference.utils import get_tokenizer
 from trl import SFTTrainer
+import json
+from tqdm import tqdm
 import os
-os.environ["NCCL_P2P_DISABLE"] = "1"
-os.environ["NCCL_IB_DISABLE"] = "1"
+# os.environ["NCCL_P2P_DISABLE"] = "1"
+# os.environ["NCCL_IB_DISABLE"] = "1"
 
-model_name = "llama-2-7b"
 # 🌟🌟🌟 改变不同的初始化方式 🌟🌟🌟
-tokenizer_path = f"/home/wujingyao/codes/experiment/GraphLLM-graph/models/aveinit_updated_tokenizer_{model_name}"
-model_path = f"/home/wujingyao/codes/experiment/GraphLLM-graph/models/aveinit_updated_model_{model_name}"
+model_name = "llama-2-7b"
+tokenizer_path = f"./models/aveinit_updated_tokenizer_{model_name}"
+model_path = f"./models/aveinit_updated_model_{model_name}"
 output_dir = f"./models/structure-pretrain-{model_name}-1stage"
 device_map = "auto"
 
