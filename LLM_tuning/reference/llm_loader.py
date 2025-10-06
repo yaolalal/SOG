@@ -149,11 +149,11 @@ def main():
     # set_mirror_url()
     hf_token = get_huggingface_token()
 
-    model_name = "/data1/wujingyao-20354/wujingyao/codes/models/llama-3.2-3b-instruct"
+    model_name = "./models/llama-3.2-3b-instruct"
     model, tokenizer = load_model_and_tokenizer(model_name)
 
-    tokenizer_path = "/data1/wujingyao-20354/wujingyao/codes/models/llama-3.2-3b-instruct-graph/update_tokenizer"
-    model_path = "/data1/wujingyao-20354/wujingyao/codes/models/llama-3.2-3b-instruct-graph/updated_model"
+    tokenizer_path = "./models/llama-3.2-3b-instruct-graph/update_tokenizer"
+    model_path = "./models/llama-3.2-3b-instruct-graph/updated_model"
 
     if new_tokens:
         tokenizer, model = add_new_tokens(tokenizer, model, new_tokens)

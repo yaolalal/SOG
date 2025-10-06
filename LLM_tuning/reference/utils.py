@@ -9,14 +9,14 @@ from transformers import AutoTokenizer
 
 
 dataset_name = 'cora'
-data_path = '/home/wujingyao/codes/experiment/Quantization/VQGraph-my/cora.json'
+data_path = './corpus/cora.json'
 with open(data_path, 'r') as f:
     data = json.load(f)
 print("🌟Loaded {} nodes. Data format:".format(len(data)))
 print(data[0])
 
 
-tokenizer_path = "/data1/wujingyao-20354/wujingyao/codes/models/llama-3.2-3b-instruct-graph/update_tokenizer"
+tokenizer_path = "./models/llama-3.2-3b-instruct-graph/update_tokenizer"
 tokenizer = AutoTokenizer.from_pretrained(tokenizer_path, trust_remote_code=True)
 assistant_name = "LLM Assistant"
 system_prompt = "You are a helpful and reliable assistant."
@@ -176,7 +176,7 @@ def process(row,verbose=False):
    return row
 
 def train_val_test_split(dataset_name):
-    f_path = f'/home/wujingyao/codes/ experiment/Quantization/VQGraph-my/new_node_feats/{dataset_name}/splits.json'
+    f_path = f'./corpus/new_node_feats/{dataset_name}/splits.json'
     with open(f_path,'r') as f:
         splits = json.load(f)
     train_indices = splits['train']
@@ -247,7 +247,7 @@ def wrap_struct_token(example):
 
 def get_tokenizer(tokenizer_path=None):
     if tokenizer_path is None:
-        tokenizer_path = "/data1/wujingyao-20354/wujingyao/codes/models/llama-3.2-3b-instruct-graph/update_tokenizer"
+        tokenizer_path = "./models/llama-3.2-3b-instruct-graph/update_tokenizer"
     tokenizer = AutoTokenizer.from_pretrained(tokenizer_path, trust_remote_code=True)
     assistant_name = "LLM Assistant"
     system_prompt = "You are a helpful and reliable assistant."
